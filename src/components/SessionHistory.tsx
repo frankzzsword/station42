@@ -49,19 +49,34 @@ function formatTimeRange(startTime: string | Date, endTime?: string | Date | nul
   }
 }
 
-export default function SessionHistory() {
+interface SessionHistoryProps {
+  orderId?: string;
+  limit?: number;
+}
+
+export default function SessionHistory({ orderId, limit }: SessionHistoryProps = {}) {
   const { orders } = useStore();
 
   // Process all sessions across all orders, grouped by date and employee
   const dailyGroups = useMemo(() => {
     const groups: Record<string, DailyGroup> = {};
 
-    orders.forEach(order => {
+    // Filter orders if orderId is provided
+    const filteredOrders = orderId 
+      ? orders.filter(order => order.number === orderId)
+      : orders;
+
+    filteredOrders.forEach(order => {
       const allSessions = order.sessions || [];
 
       if (!allSessions.length) return;
 
-      allSessions
+      // Apply limit if provided
+      const limitedSessions = limit 
+        ? allSessions.slice(0, limit)
+        : allSessions;
+
+      limitedSessions
         .filter(session => 
           session.startTime && 
           session.employeeName &&
