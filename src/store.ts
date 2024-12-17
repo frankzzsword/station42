@@ -1,12 +1,12 @@
 import { create } from 'zustand';
 import { io, Socket } from 'socket.io-client';
 import { WorkOrder, WorkSession, OrderTime } from '@/types';
+import { config } from '@/config';
 
 // Create a single socket instance
-const socket = io('http://localhost:3001', {
-  transports: ['websocket'],
-  reconnection: true,
-  reconnectionAttempts: 5
+const socket = io(config.socketUrl, {
+  ...config.socket.options,
+  autoConnect: true
 });
 
 interface Store {
@@ -44,7 +44,6 @@ const useStore = create<Store>((set, get) => {
 
         Object.entries(updatedOrderTimes).forEach(([orderId, orderTime]) => {
           if (orderTime.isActive && orderTime.lastUpdate) {
-            // Only update if at least 1 second has passed
             const timeDiff = Math.floor((now - orderTime.lastUpdate) / 1000);
             if (timeDiff >= 1) {
               updatedOrderTimes[orderId] = {
@@ -66,7 +65,7 @@ const useStore = create<Store>((set, get) => {
           },
         } : state;
       });
-    }, 1000); // Update every second
+    }, 1000);
   }
 
   return {
@@ -80,7 +79,7 @@ const useStore = create<Store>((set, get) => {
       console.log('Initializing store...');
       try {
         // Fetch initial orders
-        const response = await fetch('http://localhost:3001/api/orders');
+        const response = await fetch(config.api.orders);
         if (!response.ok) {
           throw new Error('Failed to fetch orders');
         }
@@ -101,10 +100,8 @@ const useStore = create<Store>((set, get) => {
 
     setOrders: (orders) => {
       console.log('Setting orders:', orders);
-      // Initialize orderTimes for each order
       const orderTimes: { [key: string]: OrderTime } = {};
       orders.forEach(order => {
-        // Only use active sessions from the order data
         const activeSessions = order.activeSessions || [];
         const isActive = activeSessions.length > 0;
         const currentSession = isActive ? activeSessions[0] : null;
@@ -123,7 +120,6 @@ const useStore = create<Store>((set, get) => {
         };
       });
 
-      console.log('Setting state with orderTimes:', orderTimes);
       set({
         orders,
         rangeTimer: {
@@ -156,7 +152,6 @@ const useStore = create<Store>((set, get) => {
     }),
 
     updateOrderTime: (orderId, orderTime) => {
-      console.log('Updating order time:', orderId, orderTime);
       set((state) => {
         const order = state.orders.find(o => o.id === orderId || o.number === orderId);
         if (!order) {
@@ -164,7 +159,6 @@ const useStore = create<Store>((set, get) => {
           return state;
         }
 
-        // First update the orderTimes
         const updatedOrderTimes = {
           ...state.rangeTimer.orderTimes,
           [order.number]: {
@@ -173,7 +167,6 @@ const useStore = create<Store>((set, get) => {
           },
         };
 
-        // Then update the orders array
         const updatedOrders = state.orders.map(o => {
           if (o.id === orderId || o.number === orderId) {
             return {
@@ -190,7 +183,6 @@ const useStore = create<Store>((set, get) => {
           return o;
         });
 
-        // Return a completely new state object
         return {
           ...state,
           orders: updatedOrders,
@@ -203,7 +195,6 @@ const useStore = create<Store>((set, get) => {
     },
 
     updateOrderStatus: (orderId, employeeName, isActive) => {
-      console.log('Updating order status:', { orderId, employeeName, isActive });
       set((state) => {
         const currentTime = new Date().toISOString();
         const now = Date.now();
@@ -214,7 +205,6 @@ const useStore = create<Store>((set, get) => {
           return state;
         }
 
-        // Get current orderTime or create new one
         const currentOrderTime = state.rangeTimer.orderTimes[order.number] || {
           totalSeconds: 0,
           currentSessionSeconds: 0,
@@ -225,11 +215,9 @@ const useStore = create<Store>((set, get) => {
           lastUpdate: now,
         };
 
-        // Create a new orderTime object
         const updatedOrderTime = { ...currentOrderTime };
 
         if (isActive && !currentOrderTime.isActive) {
-          // Start new session
           const newSession = {
             employeeName,
             startTime: currentTime,
@@ -242,9 +230,7 @@ const useStore = create<Store>((set, get) => {
           updatedOrderTime.lastActiveDate = currentTime;
           updatedOrderTime.lastUpdate = now;
           updatedOrderTime.currentSessionSeconds = 0;
-          console.log('Started new session:', newSession);
         } else if (!isActive && currentOrderTime.isActive) {
-          // End current session
           const sessions = [...currentOrderTime.sessions];
           const currentSession = sessions[sessions.length - 1];
           if (currentSession && !currentSession.endTime) {
@@ -259,14 +245,12 @@ const useStore = create<Store>((set, get) => {
             sessions[sessions.length - 1] = updatedSession;
             updatedOrderTime.sessions = sessions;
             updatedOrderTime.totalSeconds += updatedSession.duration;
-            console.log('Ended session:', updatedSession);
           }
           updatedOrderTime.isActive = false;
           updatedOrderTime.employeeName = '';
           updatedOrderTime.currentSessionSeconds = 0;
         }
 
-        // Create new orders array with updated sessions
         const updatedOrders = state.orders.map((o) =>
           o.id === orderId || o.number === orderId
             ? { 
@@ -282,8 +266,7 @@ const useStore = create<Store>((set, get) => {
             : o
         );
 
-        // Create completely new state object
-        const newState = {
+        return {
           ...state,
           orders: updatedOrders,
           rangeTimer: {
@@ -294,14 +277,10 @@ const useStore = create<Store>((set, get) => {
             },
           },
         };
-
-        console.log('Updated state:', newState);
-        return newState;
       });
     },
 
     initializeSocket: () => {
-      // Remove any existing listeners
       socket.removeAllListeners();
       
       socket.on('orderTimeUpdate', (data: { orderId: string; orderTime: OrderTime }) => {
@@ -317,6 +296,14 @@ const useStore = create<Store>((set, get) => {
       socket.on('ordersUpdate', (orders: WorkOrder[]) => {
         console.log('Received ordersUpdate:', orders);
         get().setOrders(orders);
+      });
+
+      socket.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
+      });
+
+      socket.on('error', (error) => {
+        console.error('Socket error:', error);
       });
 
       set({ socket });
