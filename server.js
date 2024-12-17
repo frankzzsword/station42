@@ -13,7 +13,12 @@ const handle = app.getRequestHandler();
 // MongoDB Models
 const Order = require('./models/Order');
 
-mongoose.connect(process.env.MONGODB_URI, {
+const MONGODB_URI = process.env.MONGODB_URI;
+if (!MONGODB_URI) {
+  throw new Error('Please define the MONGODB_URI environment variable');
+}
+
+mongoose.connect(MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
@@ -27,17 +32,15 @@ app.prepare().then(() => {
   // Socket.IO setup with enhanced configuration
   const io = new Server(httpServer, {
     cors: {
-      origin: ["https://station42.vercel.app", "http://localhost:3000"],
+      origin: process.env.VERCEL_URL ? 
+        [`https://${process.env.VERCEL_URL}`, 'https://station42.vercel.app'] : 
+        ['http://localhost:3000'],
       methods: ["GET", "POST"],
-      allowedHeaders: ["Content-Type", "Authorization"],
+      allowedHeaders: ["Content-Type"],
       credentials: true
     },
     transports: ['websocket', 'polling'],
-    allowEIO3: true,
-    pingTimeout: 60000,
-    pingInterval: 25000,
-    upgradeTimeout: 30000,
-    maxHttpBufferSize: 1e8
+    path: '/api/socketio',
   });
 
   // Socket.IO error handling
@@ -55,29 +58,24 @@ app.prepare().then(() => {
 
   // Express middleware
   server.use(cors({
-    origin: ["https://station42.vercel.app", "http://localhost:3000"],
+    origin: process.env.VERCEL_URL ? 
+      [`https://${process.env.VERCEL_URL}`, 'https://station42.vercel.app'] : 
+      ['http://localhost:3000'],
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type'],
     credentials: true
   }));
-  server.use(express.json({ limit: '50mb' }));
-  server.use(express.urlencoded({ extended: true, limit: '50mb' }));
+  
+  server.use(express.json());
 
-  // Health check endpoint
-  server.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok' });
-  });
-
-  // API Routes
+  // API Routes with better error handling
   server.get('/api/orders', async (req, res) => {
     try {
-      const orders = await Order.find().sort({ createdAt: -1 });
-      res.setHeader('Content-Type', 'application/json');
-      res.status(200).json(orders);
+      const orders = await Order.find().sort({ createdAt: -1 }).lean();
+      res.json(orders);
     } catch (error) {
       console.error('Error fetching orders:', error);
-      res.setHeader('Content-Type', 'application/json');
-      res.status(500).json({ error: 'Internal server error', details: error.message });
+      res.status(500).json({ error: 'Failed to fetch orders' });
     }
   });
 
@@ -101,28 +99,18 @@ app.prepare().then(() => {
         sessions: []
       });
 
-      // Emit to all connected clients
       io.emit('orderCreated', order.toJSON());
-
-      res.setHeader('Content-Type', 'application/json');
       res.status(201).json(order);
     } catch (error) {
       console.error('Error creating order:', error);
-      res.setHeader('Content-Type', 'application/json');
-      res.status(500).json({ error: 'Internal server error', details: error.message });
+      res.status(500).json({ error: 'Failed to create order' });
     }
   });
 
-  // Socket.IO middleware to attach to Express routes
+  // Socket.IO middleware
   server.use((req, res, next) => {
     req.io = io;
     next();
-  });
-
-  // Error handling middleware
-  server.use((err, req, res, next) => {
-    console.error('Server error:', err);
-    res.status(500).json({ error: 'Internal server error', details: err.message });
   });
 
   // Next.js request handling
@@ -131,8 +119,8 @@ app.prepare().then(() => {
   });
 
   const PORT = process.env.PORT || 3001;
-  httpServer.listen(PORT, '0.0.0.0', (err) => {
+  httpServer.listen(PORT, (err) => {
     if (err) throw err;
-    console.log(`> Ready on http://localhost:${PORT}`);
+    console.log(`> Ready on port ${PORT}`);
   });
 }); 
