@@ -24,31 +24,24 @@ interface OrderDetailsProps {
 export default function OrderDetails({ orderId }: OrderDetailsProps) {
   const { orders, rangeTimer } = useStore();
   
-  console.log('OrderDetails Debug:', {
-    orderId,
-    orders: orders.map(o => ({ id: o.id, number: o.number, status: o.status })),
-    rangeTimer,
-    orderTimes: Object.keys(rangeTimer.orderTimes)
-  });
-
   const order = orders.find(o => o.id === orderId || o.number === orderId);
   const orderTime = order ? rangeTimer.orderTimes[order.number] : null;
 
-  console.log('Found order:', {
-    orderNumber: order?.number,
-    hasOrderTime: !!orderTime,
-    sessions: orderTime?.sessions?.length,
-    activeSessions: order?.activeSessions,
-    isOrderTimeActive: orderTime?.isActive
-  });
+  // Early return if no order found
+  if (!order) {
+    console.log('No order found for:', orderId);
+    return (
+      <div className="bg-gray-800 rounded-xl p-6 text-center text-gray-400">
+        Order not found
+      </div>
+    );
+  }
 
   // Simplify active check to just check orderTime.isActive
   const isActive = orderTime?.isActive || false;
 
   // Calculate total time from both sources
   const totalSeconds = useMemo(() => {
-    if (!order) return 0;
-    
     let total = 0;
     
     // Add completed sessions from MongoDB
@@ -67,23 +60,22 @@ export default function OrderDetails({ orderId }: OrderDetailsProps) {
     }
     
     return total;
-  }, [order, orderTime, isActive]);
+  }, [order.sessions, orderTime, isActive]);
 
   // Get current employee name
   const currentEmployee = orderTime?.employeeName || null;
 
   // Calculate timeline from dates
   const timeline = useMemo(() => {
-    if (!order.startDate || !order.dueDate) return 'Not Set';
-    const start = format(new Date(order.startDate), 'MMM d');
-    const due = format(new Date(order.dueDate), 'MMM d');
-    return `${start} - ${due}`;
+    try {
+      if (!order.startDate || !order.dueDate) return 'Not Set';
+      const start = format(new Date(order.startDate), 'MMM d');
+      const due = format(new Date(order.dueDate), 'MMM d');
+      return `${start} - ${due}`;
+    } catch (error) {
+      return 'Not Set';
+    }
   }, [order.startDate, order.dueDate]);
-
-  if (!order) {
-    console.log('No order found for:', orderId);
-    return null;
-  }
 
   return (
     <div className="space-y-8">
@@ -108,7 +100,7 @@ export default function OrderDetails({ orderId }: OrderDetailsProps) {
                   {order.status}
                 </span>
               </div>
-              <p className="text-gray-400">{order.type}</p>
+              <p className="text-gray-400">{order.type || 'No Type'}</p>
             </div>
 
             {isActive && (
@@ -180,7 +172,7 @@ export default function OrderDetails({ orderId }: OrderDetailsProps) {
           <h2 className="text-lg font-semibold text-white">Description</h2>
         </div>
         <p className="text-gray-300 whitespace-pre-wrap">
-          {order.description}
+          {order.description || 'No description available'}
         </p>
       </motion.div>
 
@@ -191,12 +183,12 @@ export default function OrderDetails({ orderId }: OrderDetailsProps) {
         transition={{ delay: 0.2 }}
       >
         <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 rounded-lg bg-blue-500/10">
-            <ChartBarIcon className="w-5 h-5 text-blue-500" />
+          <div className="p-2 rounded-lg bg-blue-900/50">
+            <ChartBarIcon className="w-5 h-5 text-blue-400" />
           </div>
           <h2 className="text-lg font-semibold text-white">Session History</h2>
         </div>
-        <SessionHistory orderId={orderId} />
+        <SessionHistory orderId={order.number} />
       </motion.div>
     </div>
   );
