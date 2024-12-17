@@ -21,7 +21,7 @@ export const config = {
   socket: {
     options: {
       path: '/api/socketio',
-      transports: ['websocket'],
+      transports: ['websocket'] as string[],
       secure: true,
       rejectUnauthorized: false,
       reconnection: true,

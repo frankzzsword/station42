@@ -5,7 +5,15 @@ import { config } from '@/config';
 
 // Create a single socket instance
 const socket = io(config.socketUrl, {
-  ...config.socket.options,
+  path: '/api/socketio',
+  transports: ['websocket'] as string[],
+  secure: true,
+  rejectUnauthorized: false,
+  reconnection: true,
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+  timeout: 20000,
   autoConnect: true
 });
 
