@@ -72,6 +72,14 @@ export default function OrderDetails({ orderId }: OrderDetailsProps) {
   // Get current employee name
   const currentEmployee = orderTime?.employeeName || null;
 
+  // Calculate timeline from dates
+  const timeline = useMemo(() => {
+    if (!order.startDate || !order.dueDate) return 'Not Set';
+    const start = format(new Date(order.startDate), 'MMM d');
+    const due = format(new Date(order.dueDate), 'MMM d');
+    return `${start} - ${due}`;
+  }, [order.startDate, order.dueDate]);
+
   if (!order) {
     console.log('No order found for:', orderId);
     return null;
@@ -151,7 +159,7 @@ export default function OrderDetails({ orderId }: OrderDetailsProps) {
                 <span className="text-sm font-medium text-gray-400">Timeline</span>
               </div>
               <p className="text-sm font-medium text-white">
-                {order.timeline || 'Not Set'}
+                {timeline}
               </p>
             </div>
           </div>
