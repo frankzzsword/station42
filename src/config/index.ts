@@ -15,10 +15,27 @@ const getBaseUrl = () => {
   return `http://localhost:${process.env.PORT || 3001}`;
 };
 
+const sanitizeUrl = (url: string) => {
+  return url.replace(/([^:]\/)\/+/g, "$1").replace(/\/$/, '');
+};
+
+const baseUrl = getBaseUrl();
+
 export const config = {
-  baseUrl: getBaseUrl(),
+  baseUrl,
+  socketUrl: process.env.NEXT_PUBLIC_SOCKET_URL || baseUrl,
   api: {
-    orders: `${getBaseUrl()}/api/orders`,
-    sessions: `${getBaseUrl()}/api/sessions`,
+    orders: sanitizeUrl(`${baseUrl}/api/orders`),
+    sessions: sanitizeUrl(`${baseUrl}/api/sessions`),
+  },
+  socket: {
+    options: {
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
+    },
   },
 } as const; 
